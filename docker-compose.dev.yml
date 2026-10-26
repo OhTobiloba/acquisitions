@@ -1,4 +1,3 @@
-
 services:
   # Neon Local proxy for development
   neon-local:
