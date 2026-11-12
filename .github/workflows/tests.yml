@@ -1,0 +1,107 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      NODE_OPTIONS: --experimental-vm-modules
+      DATABASE_URL: postgresql://test:test@localhost:5432/acquisitions_test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        id: tests
+        run: npm test -- --json --outputFile=jest-results.json
+
+      - name: Add test and coverage summary
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const escapeCommandData = (value) => value
+            .replaceAll('%', '%25')
+            .replaceAll('\r', '%0D')
+            .replaceAll('\n', '%0A');
+
+          const results = fs.existsSync('jest-results.json')
+            ? JSON.parse(fs.readFileSync('jest-results.json', 'utf8'))
+            : null;
+
+          const summary = ['## Test results', ''];
+          if (results) {
+            summary.push(
+              `- **Status:** ${results.success ? 'Passed' : 'Failed'}`,
+              `- **Tests:** ${results.numPassedTests} passed, ${results.numFailedTests} failed, ${results.numPendingTests} skipped`,
+              `- **Suites:** ${results.numPassedTestSuites} passed, ${results.numFailedTestSuites} failed`,
+              '',
+            );
+
+            for (const suite of results.testResults ?? []) {
+              const failures = (suite.assertionResults ?? []).filter((test) => test.status === 'failed');
+              for (const failure of failures) {
+                const testName = `${suite.name}: ${failure.fullName}`;
+                console.log(`::error title=Test failure::${escapeCommandData(testName)}`);
+              }
+              if (suite.status === 'failed' && failures.length === 0) {
+                console.log(`::error title=Test suite failure::${escapeCommandData(suite.name)}`);
+              }
+            }
+          } else {
+            summary.push('- Jest did not produce a results file; see the test step output for details.', '');
+            if (process.env.TEST_OUTCOME === 'failure') {
+              console.log('::error title=Test run failed::See the Run tests step output for details.');
+            }
+          }
+
+          if (fs.existsSync('coverage/coverage-final.json')) {
+            const coverage = JSON.parse(fs.readFileSync('coverage/coverage-final.json', 'utf8'));
+            const totals = { statements: [0, 0], functions: [0, 0], branches: [0, 0] };
+            const categories = { s: 'statements', f: 'functions', b: 'branches' };
+            for (const file of Object.values(coverage)) {
+              for (const [counterType, category] of Object.entries(categories)) {
+                const counts = Object.values(file[counterType] ?? {});
+                totals[category][0] += counts.filter((count) => count > 0).length;
+                totals[category][1] += counts.length;
+              }
+            }
+
+            summary.push('### Coverage', '', '| Metric | Covered |', '| --- | ---: |');
+            for (const [category, [covered, total]] of Object.entries(totals)) {
+              const percentage = total === 0 ? 0 : (covered / total) * 100;
+              summary.push(`| ${category} | ${percentage.toFixed(2)}% (${covered}/${total}) |`);
+            }
+          } else {
+            summary.push('### Coverage', '', 'Coverage report was not generated.', '');
+          }
+
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary.join('\n')}\n`);
+          NODE
+
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 30
