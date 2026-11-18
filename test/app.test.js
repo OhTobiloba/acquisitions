@@ -2,7 +2,6 @@ import { describe, expect, it } from '@jest/globals';
 import app from '#src/app.js';
 import request from 'supertest';
 
-
 describe('API Endpoints', () => {
   describe('GET /', () => {
     it('should return the welcome message', async () => {
@@ -26,7 +25,10 @@ describe('API Endpoints', () => {
     it('should return API message', async () => {
       const response = await request(app).get('/api').expect(200);
 
-      expect(response.body).toHaveProperty('message', 'Acquisitions API is running successfully!');
+      expect(response.body).toHaveProperty(
+        'message',
+        'Acquisitions API is running successfully!'
+      );
     });
   });
 
