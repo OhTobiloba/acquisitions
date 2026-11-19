@@ -25,7 +25,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKER_USERNAME }}/acquisitions
+          images: ${{ secrets.DOCKER_USERNAME }}/kubernetes-demo-api
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
@@ -48,7 +48,7 @@ jobs:
 
       - name: Add published image summary
         env:
-          IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/acquisitions
+          IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/kubernetes-demo-api
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
         run: |
